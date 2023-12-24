@@ -1,0 +1,78 @@
+---
+version: '3.2'
+
+secrets:
+  cyhy_read_creds:
+    file: ./secrets/cyhy_read_creds.yml
+  scan_read_creds:
+    file: ./secrets/scan_read_creds.yml
+  scan_write_creds:
+    file: ./secrets/scan_write_creds.yml
+  aws_config:
+    file: ./secrets/aws_config
+
+services:
+  gather:
+    depends_on:
+      - redis
+    image: 'khulnasoft-lab/gatherer:1.5.16'
+    secrets:
+      - source: cyhy_read_creds
+        target: database_creds.yml
+    volumes:
+      - ./output:/home/khulnasoft/shared
+  pshtt_report:
+    depends_on:
+      - redis
+    image: 'khulnasoft-lab/pshtt_reporter:1.2.16'
+    secrets:
+      - source: scan_read_creds
+        target: scan_read_creds.yml
+    volumes:
+      - ./output:/home/khulnasoft/shared
+  redis:
+    image: 'redis:alpine'
+    # ports:
+    #   - host_ip: 127.0.0.1
+    #     mode: host
+    #     protocol: tcp
+    #     # Note that we expose redis on a non-standard port to avoid
+    #     # conflict with the Admiral:
+    #     # https://github.com/khulnasoft-lab/ansible-role-admiral
+    #     published: 6378
+    #     target: 6379
+  save:
+    depends_on:
+      - redis
+    image: 'khulnasoft-lab/saver:1.3.2'
+    secrets:
+      - source: scan_write_creds
+        target: scan_write_creds.yml
+    volumes:
+      - ./output:/home/khulnasoft/shared
+  scan:
+    depends_on:
+      - redis
+    environment:
+      - AWS_CONFIG_FILE=/run/secrets/aws_config
+      - AWS_PROFILE=lambda
+    image: 'khulnasoft-lab/scanner:1.3.6'
+    secrets:
+      - source: aws_config
+        target: aws_config
+    volumes:
+      - ./output:/home/khulnasoft/shared
+  trustymail_report:
+    depends_on:
+      - redis
+    environment:
+      - AWS_CONFIG_FILE=/run/secrets/aws_config
+      - AWS_PROFILE=elasticsearch
+    image: 'khulnasoft-lab/trustymail_reporter:1.5.4'
+    secrets:
+      - source: scan_read_creds
+        target: scan_read_creds.yml
+      - source: aws_config
+        target: aws_config
+    volumes:
+      - ./output:/home/khulnasoft/shared
